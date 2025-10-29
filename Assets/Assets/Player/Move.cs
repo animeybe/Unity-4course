@@ -31,7 +31,6 @@ public class Move : MonoBehaviour
     [Header("Rotation")]
     [Range(0.1f, 10f)]
     [SerializeField] private float rotationSpeed = 10f;
-    private float currentAngle = 0f;
     private float newAngle = 0f;
 
     // Вызывается когда объект включается на сцене, рядом с именем объекта в UnityEditor есть галочка
