@@ -177,3 +177,4 @@ MonoBehaviour:
   rotationSpeed: 180
   floatHeight: 0.1
   floatSpeed: 2
+  collectSound: {fileID: 8300000, guid: 853fd1ffefc047944adb6235603b9b25, type: 3}

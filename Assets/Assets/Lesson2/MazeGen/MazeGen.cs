@@ -98,34 +98,70 @@ public class MazeGen : MonoBehaviour
 
     private void SpawnCoins()
     {
-        if (coinPrefab == null)
-        {
-            Debug.LogWarning("Coin prefab is not assigned in MazeGen!");
-            return;
-        }
+        if (coinPrefab == null) return;
+        if (tilePositions.Count == 0) return;
 
-        if (tilePositions.Count == 0)
-        {
-            Debug.LogWarning("No tile positions found for coin spawning!");
-            return;
-        }
-
-        List<Vector3> availablePositions = new List<Vector3>(tilePositions);
-        int coinsToSpawn = Mathf.Min(coinCount, availablePositions.Count);
+        // Создаём сетку для равномерного распределения
+        int gridSize = Mathf.CeilToInt(Mathf.Sqrt(coinCount));
+        List<Vector3> gridPositions = new List<Vector3>();
         
+        // Разделяем лабиринт на сетку
+        float minX = float.MaxValue, maxX = float.MinValue;
+        float minZ = float.MaxValue, maxZ = float.MinValue;
+        
+        foreach (Vector3 pos in tilePositions)
+        {
+            if (pos.x < minX) minX = pos.x;
+            if (pos.x > maxX) maxX = pos.x;
+            if (pos.z < minZ) minZ = pos.z;
+            if (pos.z > maxZ) maxZ = pos.z;
+        }
+        
+        // Создаём точки сетки
+        for (int x = 0; x < gridSize; x++)
+        {
+            for (int z = 0; z < gridSize; z++)
+            {
+                float targetX = minX + (maxX - minX) * (x + 0.5f) / gridSize;
+                float targetZ = minZ + (maxZ - minZ) * (z + 0.5f) / gridSize;
+                
+                // Находим ближайший тайл к точке сетки
+                Vector3 nearestTile = FindNearestTile(new Vector3(targetX, 0, targetZ));
+                if (nearestTile != Vector3.zero)
+                {
+                    gridPositions.Add(nearestTile);
+                }
+            }
+        }
+        
+        // Спавним монеты в точках сетки
+        int coinsToSpawn = Mathf.Min(coinCount, gridPositions.Count);
         for (int i = 0; i < coinsToSpawn; i++)
         {
-            if (availablePositions.Count == 0) break;
-
-            int randomIndex = Random.Range(0, availablePositions.Count);
-            Vector3 spawnPos = availablePositions[randomIndex];
+            Vector3 spawnPos = gridPositions[i];
             spawnPos.y += 0.5f;
-            
             Instantiate(coinPrefab, spawnPos, Quaternion.identity, transform);
-            availablePositions.RemoveAt(randomIndex);
         }
+        
+        Debug.Log($"Spawned {coinsToSpawn} coins using grid distribution");
+    }
 
-        Debug.Log($"Spawned {coinsToSpawn} coins in the maze");
+    private Vector3 FindNearestTile(Vector3 targetPosition)
+    {
+        Vector3 nearest = Vector3.zero;
+        float minDistance = float.MaxValue;
+        
+        foreach (Vector3 tilePos in tilePositions)
+        {
+            float distance = Vector3.Distance(tilePos, targetPosition);
+            if (distance < minDistance)
+            {
+                minDistance = distance;
+                nearest = tilePos;
+            }
+        }
+        
+        return nearest;
     }
 
     private void SetupCamera(GameObject player)
