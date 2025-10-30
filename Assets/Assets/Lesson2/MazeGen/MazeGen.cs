@@ -9,7 +9,7 @@ public class MazeGen : MonoBehaviour
     [SerializeField] private GameObject Wall;
     [SerializeField] private GameObject coinPrefab;
     [SerializeField] private GameObject playerPrefab;
-    [SerializeField] private int coinCount = 10;
+    [SerializeField] private int coinCount = 10;    
 
     [SerializeField] private Vector2Int GridSize;
 
