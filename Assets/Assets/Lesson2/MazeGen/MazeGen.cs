@@ -18,6 +18,7 @@ public class MazeGen : MonoBehaviour
 
     private GameObject playerInstance;
     private List<Vector3> tilePositions = new List<Vector3>();
+    private List<GameObject> spawnedObjects = new List<GameObject>();
     private int[,] mazeMatrix;
 
     private readonly Vector2Int[] directions = {
@@ -43,15 +44,44 @@ public class MazeGen : MonoBehaviour
 
     private void InitializeMaze()
     {
-        ClearChildren();
+        ClearAllObjects();
         GenerateMaze();
         SpawnPlayer();
         SpawnCoins();
         SpawnTurrets();
     }
 
+    private void ClearAllObjects()
+    {
+        // Удаляем из списка
+        for (int i = spawnedObjects.Count - 1; i >= 0; i--)
+        {
+            if (spawnedObjects[i] != null)
+                DestroyImmediate(spawnedObjects[i]);
+        }
+        spawnedObjects.Clear();
+        
+        // Удаляем детей напрямую
+        for (int i = transform.childCount - 1; i >= 0; i--)
+        {
+            DestroyImmediate(transform.GetChild(i).gameObject);
+        }
+        
+        // Сбрасываем матрицу
+        mazeMatrix = null;
+        tilePositions.Clear();
+        
+        Debug.Log("🧹 ALL OBJECTS CLEARED!");
+    }
+
     public void GenerateMaze()
     {
+        if (tilePrefab == null)
+        {
+            Debug.LogError("❌ tilePrefab НЕ НАЗНАЧЕН!");
+            return;
+        }
+
         tilePositions.Clear();
         mazeMatrix = new int[gridSize.x, gridSize.y];
         
@@ -59,6 +89,7 @@ public class MazeGen : MonoBehaviour
         Vector2 cellSize = new Vector2(tileScale.x, tileScale.z);
         
         GenerateCell(0, 0, cellSize);
+        Debug.Log($"✅ Maze generated: {tilePositions.Count} tiles");
     }
 
     private void GenerateCell(int x, int y, Vector2 cellSize)
@@ -70,6 +101,7 @@ public class MazeGen : MonoBehaviour
         Vector3 tilePos = transform.position + new Vector3(x * cellSize.x, 0, y * cellSize.y);
         
         GameObject tile = Instantiate(tilePrefab, tilePos, Quaternion.identity, transform);
+        spawnedObjects.Add(tile); // ✅ ОТСЛЕЖИВАЕМ!
         tilePositions.Add(tilePos);
 
         int[] shuffledDirs = new int[] { 0, 1, 2, 3 };
@@ -119,7 +151,8 @@ public class MazeGen : MonoBehaviour
             wallPrefab.transform.lossyScale.y / 2,
             y * cellSize.y + (cellSize.y / 2f) * dir.y * 0.95f
         );
-        Instantiate(wallPrefab, wallPos, rotations[dirIndex], transform);
+        GameObject wall = Instantiate(wallPrefab, wallPos, rotations[dirIndex], transform);
+        spawnedObjects.Add(wall);
     }
 
     public void SpawnCoins()
@@ -146,7 +179,8 @@ public class MazeGen : MonoBehaviour
         for (int i = 0; i < coinsToSpawn; i++)
         {
             Vector3 pos = spawnPositions[i] + Vector3.up * 0.5f;
-            Instantiate(coinPrefab, pos, Quaternion.identity, transform);
+            GameObject coin = Instantiate(coinPrefab, pos, Quaternion.identity, transform);
+            spawnedObjects.Add(coin); // ✅ ОТСЛЕЖИВАЕМ!
         }
     }
 
@@ -208,6 +242,7 @@ public class MazeGen : MonoBehaviour
             
             GameObject turret = Instantiate(rocketLauncherPrefab, pos + Vector3.up * 0.1f, Quaternion.identity);
             turret.transform.localScale *= 0.2f;
+            spawnedObjects.Add(turret); // ✅ ОТСЛЕЖИВАЕМ!
             
             RLLook lookScript = turret.GetComponentInChildren<RLLook>();
             if (lookScript != null)
@@ -234,6 +269,8 @@ public class MazeGen : MonoBehaviour
         
         Vector3 spawnPos = tilePositions[0] + Vector3.up;
         playerInstance = Instantiate(playerPrefab, spawnPos, Quaternion.identity);
+        
+        // ✅ НЕ добавляем в spawnedObjects (удаляется отдельно)
         SetupCamera(playerInstance);
         
         Health playerHealth = playerInstance.GetComponent<Health>();
@@ -278,20 +315,19 @@ public class MazeGen : MonoBehaviour
 
     private IEnumerator RespawnEverything()
     {
-        Debug.Log("🔄 RESPAWN STARTED!");
-        enabled = false;
+        Debug.Log("💀 PLAYER DIED - REGENERATING MAZE!");
         
+        // ✅ Удаляем только игрока (НЕ лабиринт!)
         if (playerInstance != null)
         {
             Destroy(playerInstance);
             playerInstance = null;
         }
         
-        ClearChildren();
-        yield return new WaitForSeconds(1.2f);
+        yield return new WaitForSeconds(1.5f);
         
+        // ✅ ПОЛНАЯ РЕГЕНЕРАЦИЯ
         InitializeMaze();
-        enabled = true;
-        Debug.Log("✅ RESPAWN COMPLETE!");
+        Debug.Log("✅ MAZE FULLY REGENERATED!");
     }
 }
