@@ -15,6 +15,7 @@ public class MazeGen : MonoBehaviour
     [Header("Settings")]
     [SerializeField] private Vector2Int gridSize = new Vector2Int(15, 15);
     [SerializeField] private int coinCount = 10;
+    [SerializeField] private int turretCount = 4;
 
     private GameObject playerInstance;
     private List<Vector3> tilePositions = new List<Vector3>();
@@ -89,7 +90,7 @@ public class MazeGen : MonoBehaviour
         Vector2 cellSize = new Vector2(tileScale.x, tileScale.z);
         
         GenerateCell(0, 0, cellSize);
-        Debug.Log($"✅ Maze generated: {tilePositions.Count} tiles");
+        Debug.Log($"Maze generated: {tilePositions.Count} tiles");
     }
 
     private void GenerateCell(int x, int y, Vector2 cellSize)
@@ -101,7 +102,7 @@ public class MazeGen : MonoBehaviour
         Vector3 tilePos = transform.position + new Vector3(x * cellSize.x, 0, y * cellSize.y);
         
         GameObject tile = Instantiate(tilePrefab, tilePos, Quaternion.identity, transform);
-        spawnedObjects.Add(tile); // ✅ ОТСЛЕЖИВАЕМ!
+        spawnedObjects.Add(tile); // ОТСЛЕЖИВАЕМ!
         tilePositions.Add(tilePos);
 
         int[] shuffledDirs = new int[] { 0, 1, 2, 3 };
@@ -180,7 +181,7 @@ public class MazeGen : MonoBehaviour
         {
             Vector3 pos = spawnPositions[i] + Vector3.up * 0.5f;
             GameObject coin = Instantiate(coinPrefab, pos, Quaternion.identity, transform);
-            spawnedObjects.Add(coin); // ✅ ОТСЛЕЖИВАЕМ!
+            spawnedObjects.Add(coin); // ОТСЛЕЖИВАЕМ!
         }
     }
 
@@ -218,38 +219,88 @@ public class MazeGen : MonoBehaviour
 
     public void SpawnTurrets()
     {
-        if (rocketLauncherPrefab == null || playerInstance == null || tilePositions.Count == 0) return;
+        if (rocketLauncherPrefab == null || playerInstance == null || tilePositions.Count == 0) 
+            return;
 
-        List<Vector3> safePositions = new List<Vector3>();
+        List<Vector3> candidatePositions = new List<Vector3>();
         Vector3 playerPos = playerInstance.transform.position;
         
-        for (int i = 0; i < tilePositions.Count; i++)
+        Debug.Log($"🔍 Searching positions... Tiles: {tilePositions.Count}");
+        
+        // 1. БОЛЬШЕ кандидатов - БЕРЁМ ВСЕ ТИЛЫ!
+        foreach (Vector3 tilePos in tilePositions)
         {
-            Vector3 pos = tilePositions[i];
-            float distance = Vector3.Distance(pos, playerPos);
+            float distance = Vector3.Distance(tilePos, playerPos);
             
-            if (distance > 8f && (int)(pos.x + pos.z) % 3 == 0 && !HasCoinNearby(pos))
-                safePositions.Add(pos);
+            // МЕНЬШЕ ОГРАНИЧЕНИЙ!
+            if (distance > 6f) // Было 10м → 6м!
+                candidatePositions.Add(tilePos);
         }
-
-        int turretCount = Mathf.Clamp(safePositions.Count, 3, 5);
-        for (int i = 0; i < turretCount; i++)
+        
+        Debug.Log($"📍 Candidates: {candidatePositions.Count}");
+        
+        // 2. ФИЛЬТР с отладкой
+        List<Vector3> validPositions = new List<Vector3>();
+        int rejected = 0;
+        
+        foreach (Vector3 pos in candidatePositions)
         {
-            if (safePositions.Count == 0) break;
+            bool rejectedReason = false;
             
-            int index = UnityEngine.Random.Range(0, safePositions.Count);
-            Vector3 pos = safePositions[index];
+            // Нет монеты
+            if (HasCoinNearby(pos)) { rejected++; rejectedReason = true; continue; }
+            
+            // Wall Raycast - НО с fallback!
+            bool hasWall = HasWallBetween(playerPos, pos);
+            if (!hasWall) { rejected++; rejectedReason = true; continue; }
+            
+            // Расстояние между турелями
+            foreach (Vector3 validPos in validPositions)
+            {
+                if (Vector3.Distance(pos, validPos) < 4f)
+                {
+                    rejected++;
+                    rejectedReason = true;
+                    break;
+                }
+            }
+            if (rejectedReason) continue;
+            
+            validPositions.Add(pos);
+        }
+        
+        Debug.Log($"Valid positions: {validPositions.Count} (rejected: {rejected})");
+        
+        // 3. Спавним столько, сколько можем
+        int spawnedCount = Mathf.Min(turretCount, validPositions.Count);
+        for (int i = 0; i < spawnedCount; i++)
+        {
+            int index = UnityEngine.Random.Range(0, validPositions.Count);
+            Vector3 pos = validPositions[index];
             
             GameObject turret = Instantiate(rocketLauncherPrefab, pos + Vector3.up * 0.1f, Quaternion.identity);
             turret.transform.localScale *= 0.2f;
-            spawnedObjects.Add(turret); // ✅ ОТСЛЕЖИВАЕМ!
+            spawnedObjects.Add(turret);
             
             RLLook lookScript = turret.GetComponentInChildren<RLLook>();
             if (lookScript != null)
                 lookScript.target = playerInstance.transform;
             
-            safePositions.RemoveAt(index);
+            validPositions.RemoveAt(index);
+            Debug.Log($"🎯 Turret #{i+1} at {pos}");
         }
+        
+        Debug.Log($"Spawned {spawnedCount}/{turretCount} turrets!");
+    }
+
+    // Проверка стены между точками
+    private bool HasWallBetween(Vector3 pointA, Vector3 pointB)
+    {
+        Vector3 direction = (pointB - pointA).normalized;
+        float distance = Vector3.Distance(pointA, pointB);
+        
+        // Raycast от игрока к позиции турели
+        return Physics.Raycast(pointA + Vector3.up * 0.5f, direction, distance * 0.95f, LayerMask.GetMask("Wall"));
     }
 
     private bool HasCoinNearby(Vector3 position)
@@ -270,7 +321,7 @@ public class MazeGen : MonoBehaviour
         Vector3 spawnPos = tilePositions[0] + Vector3.up;
         playerInstance = Instantiate(playerPrefab, spawnPos, Quaternion.identity);
         
-        // ✅ НЕ добавляем в spawnedObjects (удаляется отдельно)
+        // НЕ добавляем в spawnedObjects (удаляется отдельно)
         SetupCamera(playerInstance);
         
         Health playerHealth = playerInstance.GetComponent<Health>();
@@ -317,7 +368,7 @@ public class MazeGen : MonoBehaviour
     {
         Debug.Log("💀 PLAYER DIED - REGENERATING MAZE!");
         
-        // ✅ Удаляем только игрока (НЕ лабиринт!)
+        // Удаляем только игрока (НЕ лабиринт!)
         if (playerInstance != null)
         {
             Destroy(playerInstance);
@@ -326,8 +377,8 @@ public class MazeGen : MonoBehaviour
         
         yield return new WaitForSeconds(1.5f);
         
-        // ✅ ПОЛНАЯ РЕГЕНЕРАЦИЯ
+        // ПОЛНАЯ РЕГЕНЕРАЦИЯ
         InitializeMaze();
-        Debug.Log("✅ MAZE FULLY REGENERATED!");
+        Debug.Log("MAZE FULLY REGENERATED!");
     }
 }
