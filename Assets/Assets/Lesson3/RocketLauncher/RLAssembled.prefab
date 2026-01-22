@@ -84,7 +84,7 @@ MonoBehaviour:
   rlhead: {fileID: 4816875194927094851}
   rlbase: {fileID: 5752102732520254733}
   detectionRange: 20
-  rotationSpeed: 50
+  rotationSpeed: 100
 --- !u!114 &9213648024971896593
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -101,11 +101,11 @@ MonoBehaviour:
   maxAimAngle: 10
   launchPoint: {fileID: 1259581686703050541}
   rocketPrefab: {fileID: 446637952172678768, guid: 6837cdc109e2d7947b0b35b477afa5d9, type: 3}
-  rocketSpeed: 15
-  shootCooldown: 0.5
+  rocketSpeed: 5
+  shootCooldown: 2
   usePoison: 0
-  poisonDPS: 5
-  poisonDuration: 4
+  poisonDPS: 0.5
+  poisonDuration: 20
 --- !u!65 &687747133390793461
 BoxCollider:
   m_ObjectHideFlags: 0

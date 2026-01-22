@@ -1,6 +1,5 @@
 using UnityEngine;
 using System.Collections;
-using System;
 
 public class RLLaunch : MonoBehaviour
 {
@@ -15,9 +14,9 @@ public class RLLaunch : MonoBehaviour
     [SerializeField] private float shootCooldown = 2f;
 
     [Header("Poison")]
-    [SerializeField] private bool usePoison;
-    [SerializeField] [Range(0f, 20f)] private float poisonDPS = 5f;
-    [SerializeField] [Range(1f, 10f)] private float poisonDuration = 4f;
+    [SerializeField] private bool usePoison = true;           // ВКЛ/ВЫКЛ яд
+    [SerializeField] private float poisonDPS = 8f;     // DPS яда
+    [SerializeField] private float poisonDuration = 5f; // Длительность
 
     private RLLook lookScript;
     private bool canShoot = true;
@@ -27,22 +26,29 @@ public class RLLaunch : MonoBehaviour
     {
         shootDelay = new WaitForSeconds(shootCooldown);
         lookScript = GetComponentInChildren<RLLook>();
+        
+        // ПРОВЕРКА безопасности
+        if (rocketPrefab == null) Debug.LogError("RLLaunch: rocketPrefab НЕ НАЗНАЧЕН!");
+        if (launchPoint == null) Debug.LogError("RLLaunch: launchPoint НЕ НАЗНАЧЕН!");
     }
 
     void Update()
     {
+        // Стреляет только при точном прицеле
         if (canShoot && lookScript?.CanSeePlayerImpublic == true && IsTargetValid())
+        {
             StartCoroutine(LaunchRocket());
+        }
     }
 
     private bool IsTargetValid()
     {
-        if (lookScript.target == null) return false;
+        if (lookScript.target == null || launchPoint == null) return false;
         
-        var distance = Vector3.Distance(transform.position, lookScript.target.position);
-        var angle = Vector3.Angle(lookScript.rlhead.forward, 
+        float distance = Vector3.Distance(transform.position, lookScript.target.position);
+        float angle = Vector3.Angle(lookScript.rlhead.forward, 
             (lookScript.target.position - lookScript.rlhead.position).normalized);
-            
+        
         return distance <= shootRange && angle <= maxAimAngle;
     }
 
@@ -52,13 +58,19 @@ public class RLLaunch : MonoBehaviour
 
         if (rocketPrefab != null && launchPoint != null)
         {
-            var rocket = Instantiate(rocketPrefab, launchPoint.position, launchPoint.rotation);
-            var rocketRb = rocket.GetComponent<Rigidbody>();
-            rocketRb.linearVelocity = launchPoint.forward * rocketSpeed;
+            // Создание ракеты
+            GameObject rocket = Instantiate(rocketPrefab, launchPoint.position, launchPoint.rotation);
+            Rigidbody rocketRb = rocket.GetComponent<Rigidbody>();
+            if (rocketRb != null)
+                rocketRb.linearVelocity = launchPoint.forward * rocketSpeed;
 
-            var rocketScript = rocket.GetComponent<FlyingRocket>();
-            if (usePoison && rocketScript != null)
+            // ПЕРЕДАЧА ПАРАМЕТРОВ ЯДА
+            FlyingRocket rocketScript = rocket.GetComponent<FlyingRocket>();
+            if (rocketScript != null && usePoison)
+            {
                 rocketScript.SetPoison(poisonDPS, poisonDuration);
+                Debug.Log($"Яд передан ракете: {poisonDPS} DPS на {poisonDuration}s");
+            }
         }
 
         yield return shootDelay;
