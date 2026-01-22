@@ -1,33 +1,70 @@
-using System.Collections;
 using UnityEngine;
+using System.Collections;
 
 public class FlyingRocket : MonoBehaviour
 {
-    [SerializeField] float speed;
-    [SerializeField] float detonationTime;
-    [SerializeField] GameObject explosion;
+    [Header("Movement")]
+    [SerializeField] private float speed = 15f;
+    [SerializeField] private float lifetime = 5f;
+
+    [Header("Combat")]
+    [SerializeField] private float damage = 25f;
+    [SerializeField] private float poisonDPS = 0f;
+    [SerializeField] private float poisonDuration = 4f;
+    [SerializeField] private GameObject explosionPrefab;
+
+    private Rigidbody rb;
 
     void Awake()
     {
-        StartCoroutine(Move());
-        StartCoroutine(Detonate());
+        rb = GetComponent<Rigidbody>();
+        if (rb == null)
+        {
+            rb = gameObject.AddComponent<Rigidbody>();
+            rb.useGravity = false;
+            rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+        }
+        Destroy(gameObject, lifetime);
     }
 
-
-    IEnumerator Move()
+    void Start()
     {
-        while (true)
+        rb.linearVelocity = transform.forward * speed;
+    }
+
+    public void SetPoison(float dps, float duration)
+    {
+        poisonDPS = dps;
+        poisonDuration = duration;
+    }
+
+    void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Wall"))
         {
-            transform.position += transform.forward * speed * Time.fixedDeltaTime;
-            yield return new WaitForFixedUpdate();
+            Explode();
+            return;
+        }
+
+        Health targetHealth = other.GetComponent<Health>();
+        if (targetHealth != null)
+        {
+            targetHealth.TakeDamage(damage);
+            if (poisonDPS > 0)
+                targetHealth.ApplyPoison(poisonDPS, poisonDuration);
+            Explode();
         }
     }
-    IEnumerator Detonate()
-    {
-        yield return new WaitForSeconds(detonationTime);
-        Debug.Log("Detonated");
-        Destroy(Instantiate(explosion, transform.position, transform.rotation), explosion.GetComponent<ParticleSystem>().main.duration);
 
+    private void Explode()
+    {
+        if (explosionPrefab != null)
+        {
+            GameObject explosion = Instantiate(explosionPrefab, transform.position, transform.rotation);
+            ParticleSystem ps = explosion.GetComponent<ParticleSystem>();
+            if (ps != null)
+                Destroy(explosion, ps.main.duration);
+        }
         Destroy(gameObject);
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using UnityEngine;
+using System.Collections;
 using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(Rigidbody))]
@@ -73,11 +74,12 @@ public class Move : MonoBehaviour
     {
         moveDir = moveAction.ReadValue<Vector2>().normalized;
 
-        if (jumpAction.WasPressedThisFrame() && BottomCollisions > 0)
+        if (jumpAction.WasPressedThisFrame() && BottomCollisions > 0 && rb.linearVelocity.y < 0.1f)
         {
             Jump();
         }
     }
+
     // Вызывается через константный промежуток времени который указан в UnityEditor (0.02 секунды)
     // Все действия связанные с физикой лучше делать здесь
     void FixedUpdate()

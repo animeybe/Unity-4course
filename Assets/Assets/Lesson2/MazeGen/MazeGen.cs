@@ -1,229 +1,297 @@
-using Unity.Collections;
 using UnityEngine;
-using System.Linq;
 using System.Collections.Generic;
+using System.Collections;
+using System;
 
 public class MazeGen : MonoBehaviour
 {
-    [SerializeField] private GameObject Tile;
-    [SerializeField] private GameObject Wall;
-    [SerializeField] private GameObject coinPrefab;
+    [Header("Prefabs")]
+    [SerializeField] private GameObject tilePrefab;
+    [SerializeField] private GameObject wallPrefab;
     [SerializeField] private GameObject playerPrefab;
-    [SerializeField] private int coinCount = 10;    
+    [SerializeField] private GameObject coinPrefab;
+    [SerializeField] private GameObject rocketLauncherPrefab;
 
-    [SerializeField] private Vector2Int GridSize;
+    [Header("Settings")]
+    [SerializeField] private Vector2Int gridSize = new Vector2Int(15, 15);
+    [SerializeField] private int coinCount = 10;
 
-    private int[,] matrix;
-    private Vector2 offsets;
-    int nx, ny;
-    Vector2Int dir;
-
+    private GameObject playerInstance;
     private List<Vector3> tilePositions = new List<Vector3>();
-    private Vector3 startPosition;
+    private int[,] mazeMatrix;
 
-    Vector2Int[] directions = {
-        new Vector2Int(0, 1),
-        new Vector2Int(1, 0),
-        new Vector2Int(0, -1),
-        new Vector2Int(-1, 0)
+    private readonly Vector2Int[] directions = {
+        new Vector2Int(0, 1), new Vector2Int(1, 0),
+        new Vector2Int(0, -1), new Vector2Int(-1, 0)
     };
-    Quaternion[] rotations = {
-        Quaternion.Euler(0, 0, 0),
-        Quaternion.Euler(0, 90, 0),
-        Quaternion.Euler(0, 180, 0),
-        Quaternion.Euler(0, 270, 0)
+    private readonly Quaternion[] rotations = {
+        Quaternion.Euler(0, 0, 0), Quaternion.Euler(0, 90, 0),
+        Quaternion.Euler(0, 180, 0), Quaternion.Euler(0, 270, 0)
     };
-    int[] index = {
-        0, 1, 2, 3
-    };
-    int[] powers = {
-        1, 2, 4, 8
-    };
+    private readonly int[] powers = { 1, 2, 4, 8 };
 
-    bool borderBool;
-    
     void Awake()
     {
+        Health.OnPlayerDeath += HandlePlayerDeath;
+        InitializeMaze();
+    }
+
+    void OnDestroy()
+    {
+        Health.OnPlayerDeath -= HandlePlayerDeath;
+    }
+
+    private void InitializeMaze()
+    {
+        ClearChildren();
         GenerateMaze();
         SpawnPlayer();
         SpawnCoins();
+        SpawnTurrets();
     }
 
-    private void GenerateMaze()
+    public void GenerateMaze()
     {
-        matrix = new int[GridSize.x, GridSize.y];
-        offsets = new Vector2(Tile.transform.localScale.x, Tile.transform.localScale.z);
-
-        startPosition = transform.position + new Vector3(0, 0, 0);
-
-        GenerateCell(0, 0);
+        tilePositions.Clear();
+        mazeMatrix = new int[gridSize.x, gridSize.y];
+        
+        Vector3 tileScale = tilePrefab.transform.localScale;
+        Vector2 cellSize = new Vector2(tileScale.x, tileScale.z);
+        
+        GenerateCell(0, 0, cellSize);
     }
 
-    private void GenerateCell(int x, int y)
+    private void GenerateCell(int x, int y, Vector2 cellSize)
     {
-        if (x < 0 || y < 0 || x >= GridSize.x || y >= GridSize.y || matrix[x, y] > 0)
-        {
+        if (x < 0 || y < 0 || x >= gridSize.x || y >= gridSize.y || mazeMatrix[x, y] > 0)
             return;
-        }
 
-        matrix[x, y] = 16;
-        Vector3 tilePosition = transform.position + new Vector3(x * offsets.x, 0, y * offsets.y);
+        mazeMatrix[x, y] = 16;
+        Vector3 tilePos = transform.position + new Vector3(x * cellSize.x, 0, y * cellSize.y);
         
-        GameObject newTile = Instantiate(Tile, tilePosition, transform.rotation);
-        newTile.transform.parent = transform;
-        tilePositions.Add(tilePosition);
+        GameObject tile = Instantiate(tilePrefab, tilePos, Quaternion.identity, transform);
+        tilePositions.Add(tilePos);
 
-        int[] shuffledIndex = index.OrderBy(x => Random.value).ToArray();
-        foreach (int ind in shuffledIndex)
+        int[] shuffledDirs = new int[] { 0, 1, 2, 3 };
+        ShuffleArray(shuffledDirs);
+        
+        for (int i = 0; i < 4; i++)
         {
-            dir = directions[ind];
-            nx = x + dir.x;
-            ny = y + dir.y;
+            int dirIndex = shuffledDirs[i];
+            Vector2Int dir = directions[dirIndex];
+            int nx = x + dir.x;
+            int ny = y + dir.y;
 
-            borderBool = nx < 0 || ny < 0 || nx >= GridSize.x || ny >= GridSize.y;
-            if (borderBool || (matrix[nx, ny] > 0 && (((matrix[nx, ny] - 1) >> ((ind + 2) % 4)) % 2 == 1)))
+            bool isBorder = nx < 0 || ny < 0 || nx >= gridSize.x || ny >= gridSize.y;
+            if (isBorder || (mazeMatrix[nx, ny] > 0 && HasWall(mazeMatrix[nx, ny], (dirIndex + 2) % 4)))
             {
-                Instantiate(Wall, transform.position + new Vector3(x * offsets.x + (offsets.x / 2f) * dir.x * 0.95f, Wall.transform.lossyScale.y / 2, y * offsets.y + (offsets.y / 2f) * dir.y * 0.95f), transform.rotation * rotations[ind]).transform.parent = transform;
+                PlaceWall(x, y, dirIndex, cellSize);
             }
-            else
+            else if (mazeMatrix[nx, ny] == 0)
             {
-                if (matrix[nx, ny] == 0)
-                {
-                    matrix[x, y] -= powers[ind];
-                    GenerateCell(nx, ny);
-                }
+                mazeMatrix[x, y] -= powers[dirIndex];
+                GenerateCell(nx, ny, cellSize);
             }
         }
     }
 
-    private void SpawnCoins()
+    private void ShuffleArray(int[] array)
     {
-        if (coinPrefab == null) return;
-        if (tilePositions.Count == 0) return;
-
-        // Создаём сетку для равномерного распределения
-        int gridSize = Mathf.CeilToInt(Mathf.Sqrt(coinCount));
-        List<Vector3> gridPositions = new List<Vector3>();
-        
-        // Разделяем лабиринт на сетку
-        float minX = float.MaxValue, maxX = float.MinValue;
-        float minZ = float.MaxValue, maxZ = float.MinValue;
-        
-        foreach (Vector3 pos in tilePositions)
+        for (int i = array.Length - 1; i > 0; i--)
         {
-            if (pos.x < minX) minX = pos.x;
-            if (pos.x > maxX) maxX = pos.x;
-            if (pos.z < minZ) minZ = pos.z;
-            if (pos.z > maxZ) maxZ = pos.z;
+            int j = UnityEngine.Random.Range(0, i + 1);
+            int temp = array[i];
+            array[i] = array[j];
+            array[j] = temp;
         }
+    }
+
+    private bool HasWall(int cellValue, int direction)
+    {
+        return ((cellValue - 1) >> direction) % 2 == 1;
+    }
+
+    private void PlaceWall(int x, int y, int dirIndex, Vector2 cellSize)
+    {
+        Vector2Int dir = directions[dirIndex];
+        Vector3 wallPos = transform.position + new Vector3(
+            x * cellSize.x + (cellSize.x / 2f) * dir.x * 0.95f,
+            wallPrefab.transform.lossyScale.y / 2,
+            y * cellSize.y + (cellSize.y / 2f) * dir.y * 0.95f
+        );
+        Instantiate(wallPrefab, wallPos, rotations[dirIndex], transform);
+    }
+
+    public void SpawnCoins()
+    {
+        if (coinPrefab == null || tilePositions.Count == 0) return;
+
+        List<Vector3> spawnPositions = new List<Vector3>();
+        GetTileBounds(out float minX, out float maxX, out float minZ, out float maxZ);
         
-        // Создаём точки сетки
-        for (int x = 0; x < gridSize; x++)
+        int gridSizeCoins = Mathf.CeilToInt(Mathf.Sqrt(coinCount));
+        for (int x = 0; x < gridSizeCoins; x++)
         {
-            for (int z = 0; z < gridSize; z++)
+            for (int z = 0; z < gridSizeCoins; z++)
             {
-                float targetX = minX + (maxX - minX) * (x + 0.5f) / gridSize;
-                float targetZ = minZ + (maxZ - minZ) * (z + 0.5f) / gridSize;
-                
-                // Находим ближайший тайл к точке сетки
+                float targetX = minX + (maxX - minX) * (x + 0.5f) / gridSizeCoins;
+                float targetZ = minZ + (maxZ - minZ) * (z + 0.5f) / gridSizeCoins;
                 Vector3 nearestTile = FindNearestTile(new Vector3(targetX, 0, targetZ));
                 if (nearestTile != Vector3.zero)
-                {
-                    gridPositions.Add(nearestTile);
-                }
+                    spawnPositions.Add(nearestTile);
             }
         }
-        
-        // Спавним монеты в точках сетки
-        int coinsToSpawn = Mathf.Min(coinCount, gridPositions.Count);
+
+        int coinsToSpawn = Mathf.Min(coinCount, spawnPositions.Count);
         for (int i = 0; i < coinsToSpawn; i++)
         {
-            Vector3 spawnPos = gridPositions[i];
-            spawnPos.y += 0.5f;
-            Instantiate(coinPrefab, spawnPos, Quaternion.identity, transform);
+            Vector3 pos = spawnPositions[i] + Vector3.up * 0.5f;
+            Instantiate(coinPrefab, pos, Quaternion.identity, transform);
         }
-        
-        Debug.Log($"Spawned {coinsToSpawn} coins using grid distribution");
     }
 
-    private Vector3 FindNearestTile(Vector3 targetPosition)
+    private void GetTileBounds(out float minX, out float maxX, out float minZ, out float maxZ)
+    {
+        minX = float.MaxValue; maxX = float.MinValue;
+        minZ = float.MaxValue; maxZ = float.MinValue;
+        
+        for (int i = 0; i < tilePositions.Count; i++)
+        {
+            Vector3 pos = tilePositions[i];
+            minX = Mathf.Min(minX, pos.x);
+            maxX = Mathf.Max(maxX, pos.x);
+            minZ = Mathf.Min(minZ, pos.z);
+            maxZ = Mathf.Max(maxZ, pos.z);
+        }
+    }
+
+    private Vector3 FindNearestTile(Vector3 target)
     {
         Vector3 nearest = Vector3.zero;
-        float minDistance = float.MaxValue;
+        float minDist = float.MaxValue;
         
-        foreach (Vector3 tilePos in tilePositions)
+        for (int i = 0; i < tilePositions.Count; i++)
         {
-            float distance = Vector3.Distance(tilePos, targetPosition);
-            if (distance < minDistance)
+            float dist = Vector3.Distance(tilePositions[i], target);
+            if (dist < minDist)
             {
-                minDistance = distance;
-                nearest = tilePos;
+                minDist = dist;
+                nearest = tilePositions[i];
             }
         }
-        
         return nearest;
+    }
+
+    public void SpawnTurrets()
+    {
+        if (rocketLauncherPrefab == null || playerInstance == null || tilePositions.Count == 0) return;
+
+        List<Vector3> safePositions = new List<Vector3>();
+        Vector3 playerPos = playerInstance.transform.position;
+        
+        for (int i = 0; i < tilePositions.Count; i++)
+        {
+            Vector3 pos = tilePositions[i];
+            float distance = Vector3.Distance(pos, playerPos);
+            
+            if (distance > 8f && (int)(pos.x + pos.z) % 3 == 0 && !HasCoinNearby(pos))
+                safePositions.Add(pos);
+        }
+
+        int turretCount = Mathf.Clamp(safePositions.Count, 3, 5);
+        for (int i = 0; i < turretCount; i++)
+        {
+            if (safePositions.Count == 0) break;
+            
+            int index = UnityEngine.Random.Range(0, safePositions.Count);
+            Vector3 pos = safePositions[index];
+            
+            GameObject turret = Instantiate(rocketLauncherPrefab, pos + Vector3.up * 0.1f, Quaternion.identity);
+            turret.transform.localScale *= 0.2f;
+            
+            RLLook lookScript = turret.GetComponentInChildren<RLLook>();
+            if (lookScript != null)
+                lookScript.target = playerInstance.transform;
+            
+            safePositions.RemoveAt(index);
+        }
+    }
+
+    private bool HasCoinNearby(Vector3 position)
+    {
+        Collider[] nearby = Physics.OverlapSphere(position + Vector3.up * 0.5f, 0.5f);
+        for (int i = 0; i < nearby.Length; i++)
+        {
+            if (nearby[i].CompareTag("Coin"))
+                return true;
+        }
+        return false;
+    }
+
+    public void SpawnPlayer()
+    {
+        if (playerPrefab == null || tilePositions.Count == 0) return;
+        
+        Vector3 spawnPos = tilePositions[0] + Vector3.up;
+        playerInstance = Instantiate(playerPrefab, spawnPos, Quaternion.identity);
+        SetupCamera(playerInstance);
+        
+        Health playerHealth = playerInstance.GetComponent<Health>();
+        if (playerHealth != null)
+            playerHealth.Respawn();
     }
 
     private void SetupCamera(GameObject player)
     {
-        // Находим или создаём камеру
-        Camera mainCamera = Camera.main;
-        GameObject cameraObject;
+        Camera cam = Camera.main;
+        if (cam == null)
+        {
+            GameObject camObj = new GameObject("Main Camera");
+            cam = camObj.AddComponent<Camera>();
+            camObj.AddComponent<AudioListener>();
+            camObj.tag = "MainCamera";
+        }
         
-        if (mainCamera == null)
-        {
-            // Создаём новую камеру
-            cameraObject = new GameObject("Main Camera");
-            mainCamera = cameraObject.AddComponent<Camera>();
-            cameraObject.AddComponent<AudioListener>();
-            cameraObject.tag = "MainCamera";
-        }
-        else
-        {
-            // Используем существующую камеру
-            cameraObject = mainCamera.gameObject;
-        }
-
-        // Добавляем или находим скрипт камеры на GameObject камеры
-        PlayerCamera playerCamera = cameraObject.GetComponent<PlayerCamera>();
-        if (playerCamera == null)
-        {
-            playerCamera = cameraObject.AddComponent<PlayerCamera>(); // Вызываем на GameObject!
-        }
-
-        // Настраиваем камеру
-        playerCamera.playerTarget = player.transform;
-        playerCamera.followSpeed = 5f;
-        playerCamera.cameraOffset = new Vector3(0f, 5f, 0f);
-        
-        Debug.Log("Camera setup complete for player");
+        PlayerCamera playerCam = cam.GetComponent<PlayerCamera>();
+        if (playerCam == null)
+            playerCam = cam.gameObject.AddComponent<PlayerCamera>();
+            
+        playerCam.playerTarget = player.transform;
+        playerCam.followSpeed = 5f;
+        playerCam.cameraOffset = Vector3.up * 5f;
     }
 
-    private void SpawnPlayer()
+    private void ClearChildren()
     {
-        if (playerPrefab == null)
+        for (int i = transform.childCount - 1; i >= 0; i--)
         {
-            Debug.LogWarning("Player prefab is not assigned in MazeGen!");
-            return;
+            Transform child = transform.GetChild(i);
+            if (child.CompareTag("Coin") || child.name.Contains("RocketLauncher"))
+                DestroyImmediate(child.gameObject);
         }
-
-        Vector3 spawnPosition = FindSafeSpawnPosition();
-        spawnPosition.y += 1f;
-
-        GameObject player = Instantiate(playerPrefab, spawnPosition, Quaternion.identity);
-
-        SetupCamera(player);
-        
-        Debug.Log($"Player spawned at safe position: {spawnPosition}");
     }
 
-    private Vector3 FindSafeSpawnPosition()
+    private void HandlePlayerDeath()
     {
-        if (tilePositions.Count > 0)
+        StartCoroutine(RespawnEverything());
+    }
+
+    private IEnumerator RespawnEverything()
+    {
+        Debug.Log("🔄 RESPAWN STARTED!");
+        enabled = false;
+        
+        if (playerInstance != null)
         {
-            return tilePositions[0];
+            Destroy(playerInstance);
+            playerInstance = null;
         }
         
-        return transform.position + new Vector3(2f, 0, 2f);
+        ClearChildren();
+        yield return new WaitForSeconds(1.2f);
+        
+        InitializeMaze();
+        enabled = true;
+        Debug.Log("✅ RESPAWN COMPLETE!");
     }
 }

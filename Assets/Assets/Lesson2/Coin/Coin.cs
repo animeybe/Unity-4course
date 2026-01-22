@@ -15,7 +15,7 @@ public class Coin : MonoBehaviour
     void Start()
     {
         startPosition = transform.position;
-        randomOffset = Random.Range(0f, 2f * Mathf.PI);
+        randomOffset = UnityEngine.Random.Range(0f, 2f * Mathf.PI);
     }
 
     void Update()
@@ -40,24 +40,20 @@ public class Coin : MonoBehaviour
 
     IEnumerator CollectCoin(Collider player)
     {
-        // Проигрываем звук напрямую
+        // ✅ ЗВУК ИГРАЕТ ПЕРВЫМ через AudioSource.PlayClipAtPoint
         if (collectSound != null)
         {
-            AudioSource.PlayClipAtPoint(collectSound, transform.position);
+            AudioSource.PlayClipAtPoint(collectSound, transform.position, 0.7f);
         }
         
-        // Отключаем визуал и коллайдер
+        // ВИЗУАЛЬНО исчезает
         GetComponent<Renderer>().enabled = false;
         GetComponent<Collider>().enabled = false;
         
-        // Ждём окончания звука перед уничтожением
-        yield return new WaitForSeconds(collectSound != null ? collectSound.length : 0.1f);
+        // Ждем окончания звука
+        yield return new WaitForSeconds(collectSound != null ? collectSound.length : 0.3f);
         
-        CoinCollector collector = player.GetComponent<CoinCollector>();
-        if (collector != null)
-        {
-            collector.CollectCoin(value);
-        }
+        // CoinCollector получит событие через свой OnTriggerEnter
         Destroy(gameObject);
     }
 }
