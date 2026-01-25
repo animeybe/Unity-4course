@@ -10,7 +10,6 @@ public class PlayerCamera : MonoBehaviour
 
     void Start()
     {
-        // Запоминаем начальное смещение
         initialOffset = cameraOffset;
     }
 
@@ -22,17 +21,12 @@ public class PlayerCamera : MonoBehaviour
             return;
         }
         
-        // Целевая позиция камеры - используем МИРОВЫЕ координаты вместо локальных
-        // Это предотвратит вращение камеры вместе с игроком
         Vector3 targetPosition = playerTarget.position + initialOffset;
         
-        // Плавное движение с LERP
         transform.position = Vector3.Lerp(transform.position, targetPosition, followSpeed * Time.deltaTime);
         
-        // Камера всегда смотрит на игрока, но не вращается с ним
         transform.LookAt(playerTarget);
         
-        // ФИКСИРУЕМ ПОВОРОТ КАМЕРЫ - ВСЕГДА СВЕРХУ
         transform.rotation = Quaternion.Euler(90f, 0f, 0f);
     }
 }

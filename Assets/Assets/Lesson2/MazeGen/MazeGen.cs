@@ -54,7 +54,6 @@ public class MazeGen : MonoBehaviour
 
     private void ClearAllObjects()
     {
-        // Удаляем из списка
         for (int i = spawnedObjects.Count - 1; i >= 0; i--)
         {
             if (spawnedObjects[i] != null)
@@ -62,24 +61,19 @@ public class MazeGen : MonoBehaviour
         }
         spawnedObjects.Clear();
         
-        // Удаляем детей напрямую
         for (int i = transform.childCount - 1; i >= 0; i--)
         {
             DestroyImmediate(transform.GetChild(i).gameObject);
         }
         
-        // Сбрасываем матрицу
         mazeMatrix = null;
         tilePositions.Clear();
-        
-        Debug.Log("🧹 ALL OBJECTS CLEARED!");
     }
 
     public void GenerateMaze()
     {
         if (tilePrefab == null)
         {
-            Debug.LogError("❌ tilePrefab НЕ НАЗНАЧЕН!");
             return;
         }
 
@@ -90,7 +84,6 @@ public class MazeGen : MonoBehaviour
         Vector2 cellSize = new Vector2(tileScale.x, tileScale.z);
         
         GenerateCell(0, 0, cellSize);
-        Debug.Log($"Maze generated: {tilePositions.Count} tiles");
     }
 
     private void GenerateCell(int x, int y, Vector2 cellSize)
@@ -102,7 +95,7 @@ public class MazeGen : MonoBehaviour
         Vector3 tilePos = transform.position + new Vector3(x * cellSize.x, 0, y * cellSize.y);
         
         GameObject tile = Instantiate(tilePrefab, tilePos, Quaternion.identity, transform);
-        spawnedObjects.Add(tile); // ОТСЛЕЖИВАЕМ!
+        spawnedObjects.Add(tile);
         tilePositions.Add(tilePos);
 
         int[] shuffledDirs = new int[] { 0, 1, 2, 3 };
@@ -181,7 +174,7 @@ public class MazeGen : MonoBehaviour
         {
             Vector3 pos = spawnPositions[i] + Vector3.up * 0.5f;
             GameObject coin = Instantiate(coinPrefab, pos, Quaternion.identity, transform);
-            spawnedObjects.Add(coin); // ОТСЛЕЖИВАЕМ!
+            spawnedObjects.Add(coin);
         }
     }
 
@@ -225,21 +218,14 @@ public class MazeGen : MonoBehaviour
         List<Vector3> candidatePositions = new List<Vector3>();
         Vector3 playerPos = playerInstance.transform.position;
         
-        Debug.Log($"🔍 Searching positions... Tiles: {tilePositions.Count}");
-        
-        // 1. БОЛЬШЕ кандидатов - БЕРЁМ ВСЕ ТИЛЫ!
         foreach (Vector3 tilePos in tilePositions)
         {
             float distance = Vector3.Distance(tilePos, playerPos);
             
-            // МЕНЬШЕ ОГРАНИЧЕНИЙ!
-            if (distance > 6f) // Было 10м → 6м!
+            if (distance > 6f)
                 candidatePositions.Add(tilePos);
         }
-        
-        Debug.Log($"📍 Candidates: {candidatePositions.Count}");
-        
-        // 2. ФИЛЬТР с отладкой
+
         List<Vector3> validPositions = new List<Vector3>();
         int rejected = 0;
         
@@ -247,14 +233,11 @@ public class MazeGen : MonoBehaviour
         {
             bool rejectedReason = false;
             
-            // Нет монеты
             if (HasCoinNearby(pos)) { rejected++; rejectedReason = true; continue; }
             
-            // Wall Raycast - НО с fallback!
             bool hasWall = HasWallBetween(playerPos, pos);
             if (!hasWall) { rejected++; rejectedReason = true; continue; }
             
-            // Расстояние между турелями
             foreach (Vector3 validPos in validPositions)
             {
                 if (Vector3.Distance(pos, validPos) < 4f)
@@ -269,9 +252,6 @@ public class MazeGen : MonoBehaviour
             validPositions.Add(pos);
         }
         
-        Debug.Log($"Valid positions: {validPositions.Count} (rejected: {rejected})");
-        
-        // 3. Спавним столько, сколько можем
         int spawnedCount = Mathf.Min(turretCount, validPositions.Count);
         for (int i = 0; i < spawnedCount; i++)
         {
@@ -287,19 +267,14 @@ public class MazeGen : MonoBehaviour
                 lookScript.target = playerInstance.transform;
             
             validPositions.RemoveAt(index);
-            Debug.Log($"🎯 Turret #{i+1} at {pos}");
         }
-        
-        Debug.Log($"Spawned {spawnedCount}/{turretCount} turrets!");
     }
 
-    // Проверка стены между точками
     private bool HasWallBetween(Vector3 pointA, Vector3 pointB)
     {
         Vector3 direction = (pointB - pointA).normalized;
         float distance = Vector3.Distance(pointA, pointB);
         
-        // Raycast от игрока к позиции турели
         return Physics.Raycast(pointA + Vector3.up * 0.5f, direction, distance * 0.95f, LayerMask.GetMask("Wall"));
     }
 
@@ -321,7 +296,6 @@ public class MazeGen : MonoBehaviour
         Vector3 spawnPos = tilePositions[0] + Vector3.up;
         playerInstance = Instantiate(playerPrefab, spawnPos, Quaternion.identity);
         
-        // НЕ добавляем в spawnedObjects (удаляется отдельно)
         SetupCamera(playerInstance);
         
         Health playerHealth = playerInstance.GetComponent<Health>();
@@ -349,16 +323,6 @@ public class MazeGen : MonoBehaviour
         playerCam.cameraOffset = Vector3.up * 5f;
     }
 
-    private void ClearChildren()
-    {
-        for (int i = transform.childCount - 1; i >= 0; i--)
-        {
-            Transform child = transform.GetChild(i);
-            if (child.CompareTag("Coin") || child.name.Contains("RocketLauncher"))
-                DestroyImmediate(child.gameObject);
-        }
-    }
-
     private void HandlePlayerDeath()
     {
         StartCoroutine(RespawnEverything());
@@ -366,9 +330,6 @@ public class MazeGen : MonoBehaviour
 
     private IEnumerator RespawnEverything()
     {
-        Debug.Log("💀 PLAYER DIED - REGENERATING MAZE!");
-        
-        // Удаляем только игрока (НЕ лабиринт!)
         if (playerInstance != null)
         {
             Destroy(playerInstance);
@@ -377,8 +338,6 @@ public class MazeGen : MonoBehaviour
         
         yield return new WaitForSeconds(1.5f);
         
-        // ПОЛНАЯ РЕГЕНЕРАЦИЯ
         InitializeMaze();
-        Debug.Log("MAZE FULLY REGENERATED!");
     }
 }

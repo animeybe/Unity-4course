@@ -8,8 +8,8 @@ public class FlyingRocket : MonoBehaviour
 
     [Header("Combat")]
     [SerializeField] private float damage = 25f;
-    [SerializeField] private float poisonDPS = 0f;      // Будет установлен турелью
-    [SerializeField] private float poisonDuration = 4f; // Будет установлен турелью
+    [SerializeField] private float poisonDPS = 0f;
+    [SerializeField] private float poisonDuration = 4f;
     [SerializeField] private GameObject explosionPrefab;
 
     private Rigidbody rb;
@@ -30,8 +30,6 @@ public class FlyingRocket : MonoBehaviour
     {
         rb.linearVelocity = transform.forward * speed;
     }
-
-    // ПУБЛИЧНЫЙ метод для передачи яда от турели
     public void SetPoison(float dps, float duration)
     {
         poisonDPS = dps;
@@ -40,24 +38,20 @@ public class FlyingRocket : MonoBehaviour
 
     void OnTriggerEnter(Collider other)
     {
-        // Стены
         if (other.CompareTag("Wall"))
         {
             Explode();
             return;
         }
 
-        // Игрок
         Health targetHealth = other.GetComponent<Health>();
         if (targetHealth != null)
         {
             targetHealth.TakeDamage(damage);
             
-            // ЯД работает ТОЛЬКО если включен!
             if (poisonDPS > 0)
             {
                 targetHealth.ApplyPoison(poisonDPS, poisonDuration);
-                Debug.Log($"💀 ЯД: {poisonDPS} DPS на {poisonDuration}s");
             }
             
             Explode();

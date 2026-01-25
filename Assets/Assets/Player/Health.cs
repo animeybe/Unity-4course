@@ -48,7 +48,6 @@ public class Health : MonoBehaviour
     {
         if (isDead) return;
         isDead = true;
-        Debug.Log("Player died!");
         OnPlayerDeath?.Invoke();
     }
 

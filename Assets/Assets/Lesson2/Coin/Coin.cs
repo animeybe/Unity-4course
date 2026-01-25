@@ -40,20 +40,16 @@ public class Coin : MonoBehaviour
 
     IEnumerator CollectCoin(Collider player)
     {
-        // ✅ ЗВУК ИГРАЕТ ПЕРВЫМ через AudioSource.PlayClipAtPoint
         if (collectSound != null)
         {
             AudioSource.PlayClipAtPoint(collectSound, transform.position, 0.7f);
         }
         
-        // ВИЗУАЛЬНО исчезает
         GetComponent<Renderer>().enabled = false;
         GetComponent<Collider>().enabled = false;
         
-        // Ждем окончания звука
         yield return new WaitForSeconds(collectSound != null ? collectSound.length : 0.3f);
-        
-        // CoinCollector получит событие через свой OnTriggerEnter
+
         Destroy(gameObject);
     }
 }
